@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   FlatList,
   Pressable,
@@ -11,7 +11,6 @@ import {
 import {
   createTitle,
   deskSummary,
-  displayYear,
   getBookmarks,
   getCategories,
   getShelf,
@@ -29,11 +28,26 @@ import {
   type ReaderProfile,
   type TitleRecord,
 } from "./api";
-import { PrimaryButton, SecondaryButton, TextButton, colors, radius } from "./theme";
+import { BookTile } from "./BookTile";
+import { PrimaryButton, SecondaryButton, TextButton, colors, radius, shadow } from "./theme";
 
-const UNREACHABLE = "The reading room could not be reached on port 4100.";
+const UNREACHABLE = "The reading room could not be reached. Check the API address on the Account tab.";
 
 type TabName = "catalog" | "shelf" | "marks" | "account";
+
+const ALL_SECTIONS = "";
+
+/** Half-width cell so a lone last book in the 2-column grid keeps its size. */
+function Cell({ children }: { children: ReactNode }) {
+  return <View style={styles.cell}>{children}</View>;
+}
+
+const TABS: readonly (readonly [TabName, string, string])[] = [
+  ["catalog", "Catalog", "▦"],
+  ["shelf", "Shelf", "▤"],
+  ["marks", "Marks", "★"],
+  ["account", "Account", "●"],
+];
 
 export function Tabs({
   tab,
@@ -56,9 +70,19 @@ export function Tabs({
 }) {
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: topInset }]}>
-        <Text style={styles.brand}>The Reading Room</Text>
-        <TextButton label="Librarian" onPress={onLibrarian} />
+      <View style={[styles.header, { paddingTop: topInset + 8 }]}>
+        <View style={styles.brandRow}>
+          <View style={styles.brandMark}>
+            <Text style={styles.brandMarkText}>R</Text>
+          </View>
+          <View>
+            <Text style={styles.brand}>The Reading Room</Text>
+            <Text style={styles.kicker}>A public-domain catalog</Text>
+          </View>
+        </View>
+        <Pressable onPress={onLibrarian} style={({ pressed }) => [styles.pill, pressed ? styles.pillPressed : null]}>
+          <Text style={styles.pillText}>Librarian</Text>
+        </Pressable>
       </View>
       <View style={styles.body}>
         {tab === "catalog" ? <CatalogPane onOpen={onOpen} /> : null}
@@ -67,19 +91,26 @@ export function Tabs({
         {tab === "account" ? <AccountPane reader={reader} onReader={onReader} /> : null}
       </View>
       <View style={styles.tabs}>
-        {(
-          [
-            ["catalog", "Catalog"],
-            ["shelf", "Shelf"],
-            ["marks", "Marks"],
-            ["account", "Account"],
-          ] as const
-        ).map(([name, label]) => (
-          <Pressable key={name} onPress={() => onTab(name)} style={styles.tab}>
-            <Text style={name === tab ? styles.tabOn : styles.tabOff}>{label}</Text>
-          </Pressable>
-        ))}
+        {TABS.map(([name, label, icon]) => {
+          const on = name === tab;
+          return (
+            <Pressable key={name} onPress={() => onTab(name)} style={styles.tab} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+              <View style={[styles.tabIndicator, on ? styles.tabIndicatorOn : null]} />
+              <Text style={[styles.tabIcon, on ? styles.tabOn : styles.tabOff]}>{icon}</Text>
+              <Text style={on ? styles.tabOn : styles.tabOff}>{label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
+    </View>
+  );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.meta}>{body}</Text>
     </View>
   );
 }
@@ -91,6 +122,7 @@ function CatalogPane({ onOpen }: { onOpen: (id: string) => void }) {
   const [categories, setCategories] = useState<string[]>([]);
   const [problem, setProblem] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [showAuthor, setShowAuthor] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,14 +152,42 @@ function CatalogPane({ onOpen }: { onOpen: (id: string) => void }) {
     };
   }, [query]);
 
-  return (
-    <View style={styles.fill}>
-      <View style={styles.filters}>
-        <TextInput style={styles.input} placeholder="Title" placeholderTextColor={colors.soft} value={draft.title} onChangeText={(title) => setDraft({ ...draft, title })} />
-        <TextInput style={styles.input} placeholder="Author" placeholderTextColor={colors.soft} value={draft.author} onChangeText={(author) => setDraft({ ...draft, author })} />
-        <TextInput style={styles.input} placeholder="Category" placeholderTextColor={colors.soft} value={draft.category} onChangeText={(category) => setDraft({ ...draft, category })} />
-        <View style={styles.row}>
-          <SecondaryButton label="Search" onPress={() => setQuery(draft)} />
+  const chipOptions = [ALL_SECTIONS, ...categories];
+
+  function pickCategory(category: string) {
+    const next = { ...draft, category };
+    setDraft(next);
+    setQuery(next);
+  }
+
+  const header = (
+    <View style={styles.filters}>
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.input, styles.searchInput]}
+          placeholder="Search titles"
+          placeholderTextColor={colors.faint}
+          value={draft.title}
+          onChangeText={(title) => setDraft({ ...draft, title })}
+          onSubmitEditing={() => setQuery(draft)}
+          returnKeyType="search"
+        />
+        <PrimaryButton label="Search" onPress={() => setQuery(draft)} />
+      </View>
+      {showAuthor ? (
+        <TextInput
+          style={styles.input}
+          placeholder="Author"
+          placeholderTextColor={colors.faint}
+          value={draft.author}
+          onChangeText={(author) => setDraft({ ...draft, author })}
+          onSubmitEditing={() => setQuery(draft)}
+          returnKeyType="search"
+        />
+      ) : null}
+      <View style={styles.row}>
+        <TextButton label={showAuthor ? "Hide author" : "Search by author"} onPress={() => setShowAuthor(!showAuthor)} />
+        {draft.title || draft.author || draft.category ? (
           <TextButton
             label="Clear"
             onPress={() => {
@@ -136,27 +196,45 @@ function CatalogPane({ onOpen }: { onOpen: (id: string) => void }) {
               setQuery(empty);
             }}
           />
-        </View>
-        {categories.length ? <Text style={styles.meta}>Sections: {categories.join(", ")}</Text> : null}
+        ) : null}
       </View>
+      {categories.length ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {chipOptions.map((category) => {
+            const on = query.category === category;
+            return (
+              <Pressable key={category || "all"} onPress={() => pickCategory(category)} style={[styles.chip, on ? styles.chipOn : null]}>
+                <Text style={on ? styles.chipTextOn : styles.chipText}>{category || "All"}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
       {problem ? <Text style={styles.banner}>{UNREACHABLE}</Text> : null}
       {!loaded && !problem ? <Text style={styles.meta}>Opening the shelves…</Text> : null}
-      {loaded && !problem && titles.length === 0 ? <Text style={styles.meta}>No titles match.</Text> : null}
-      <FlatList
-        data={titles}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <Pressable onPress={() => onOpen(item.id)} style={styles.card}>
-            <Text style={styles.meta}>
-              {item.category} · {displayYear(item.year)}
-            </Text>
-            <Text style={styles.work}>{item.work}</Text>
-            <Text style={styles.writer}>{item.writer}</Text>
-          </Pressable>
-        )}
-      />
+      {loaded && !problem ? (
+        <Text style={styles.count}>
+          {titles.length} {titles.length === 1 ? "title" : "titles"}
+        </Text>
+      ) : null}
     </View>
+  );
+
+  return (
+    <FlatList
+      data={titles}
+      keyExtractor={(item) => item.id}
+      numColumns={2}
+      ListHeaderComponent={header}
+      ListEmptyComponent={loaded && !problem ? <EmptyState title="No titles match" body="Try a shorter search or another section." /> : undefined}
+      contentContainerStyle={styles.grid}
+      keyboardShouldPersistTaps="handled"
+      renderItem={({ item }) => (
+        <Cell>
+          <BookTile title={item} onOpen={onOpen} />
+        </Cell>
+      )}
+    />
   );
 }
 
@@ -187,31 +265,37 @@ function ShelfPane({
     };
   }, [reader, shelfVersion]);
 
-  if (!reader) return <Text style={styles.meta}>Sign in on the Account tab to see your shelf.</Text>;
+  if (!reader) return <EmptyState title="Your shelf" body="Sign in on the Account tab to see your shelf." />;
   return (
-    <View style={styles.fill}>
-      {message ? <Text style={styles.banner}>{message}</Text> : null}
-      {titles.length === 0 ? <Text style={styles.meta}>Nothing is on your shelf yet.</Text> : null}
-      <FlatList
-        data={titles}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Pressable onPress={() => onOpen(item.id)}>
-              <Text style={styles.work}>{item.work}</Text>
-              <Text style={styles.writer}>{item.writer}</Text>
-            </Pressable>
+    <FlatList
+      data={titles}
+      keyExtractor={(item) => item.id}
+      numColumns={2}
+      ListHeaderComponent={
+        <View style={styles.paneHeader}>
+          <Text style={styles.paneTitle}>My shelf</Text>
+          {message ? <Text style={styles.banner}>{message}</Text> : null}
+        </View>
+      }
+      ListEmptyComponent={<EmptyState title="Nothing here yet" body="Open a book and tap Save to shelf." />}
+      contentContainerStyle={styles.grid}
+      renderItem={({ item }) => (
+        <Cell>
+        <BookTile
+          title={item}
+          onOpen={onOpen}
+          footer={
             <TextButton
               label="Remove"
               onPress={() => {
                 void removeFromShelf(item.id).then(() => setTitles((current) => current.filter((row) => row.id !== item.id)));
               }}
             />
-          </View>
-        )}
-      />
-    </View>
+          }
+        />
+        </Cell>
+      )}
+    />
   );
 }
 
@@ -239,30 +323,36 @@ function MarksPane({
     };
   }, [reader, shelfVersion]);
 
-  if (!reader) return <Text style={styles.meta}>Sign in on the Account tab to see bookmarks.</Text>;
+  if (!reader) return <EmptyState title="Bookmarks" body="Sign in on the Account tab to see bookmarks." />;
   return (
-    <View style={styles.fill}>
-      {titles.length === 0 ? <Text style={styles.meta}>No bookmarks yet.</Text> : null}
-      <FlatList
-        data={titles}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Pressable onPress={() => onOpen(item.id)}>
-              <Text style={styles.work}>{item.work}</Text>
-              <Text style={styles.writer}>{item.writer}</Text>
-            </Pressable>
+    <FlatList
+      data={titles}
+      keyExtractor={(item) => item.id}
+      numColumns={2}
+      ListHeaderComponent={
+        <View style={styles.paneHeader}>
+          <Text style={styles.paneTitle}>Bookmarks</Text>
+        </View>
+      }
+      ListEmptyComponent={<EmptyState title="No bookmarks yet" body="Open a book and tap Bookmark." />}
+      contentContainerStyle={styles.grid}
+      renderItem={({ item }) => (
+        <Cell>
+        <BookTile
+          title={item}
+          onOpen={onOpen}
+          footer={
             <TextButton
               label="Remove"
               onPress={() => {
                 void removeBookmark(item.id).then(() => setTitles((current) => current.filter((row) => row.id !== item.id)));
               }}
             />
-          </View>
-        )}
-      />
-    </View>
+          }
+        />
+        </Cell>
+      )}
+    />
   );
 }
 
@@ -293,23 +383,21 @@ function AccountPane({
   }, [reader]);
 
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      <Text style={styles.writer}>API address</Text>
-      <TextInput style={styles.input} value={base} onChangeText={setBase} autoCapitalize="none" autoCorrect={false} />
-      <SecondaryButton
-        label="Save address"
-        onPress={() => {
-          void saveBase(base).then(() => setMessage(`Using ${getBase()}`));
-        }}
-      />
-      <Text style={styles.meta}>The emulator default is {DEFAULT_BASE}.</Text>
+    <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
       {message ? <Text style={styles.banner}>{message}</Text> : null}
       {reader ? (
         <View style={styles.card}>
-          <Text style={styles.work}>{reader.name}</Text>
-          <Text style={styles.writer}>{reader.email}</Text>
-          <Text style={styles.meta}>{reader.role === "desk" ? "Desk" : "Reader"}</Text>
-          <TextButton
+          <View style={styles.profileRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{reader.name.trim().charAt(0).toUpperCase() || "?"}</Text>
+            </View>
+            <View style={styles.fill}>
+              <Text style={styles.cardTitle}>{reader.name}</Text>
+              <Text style={styles.meta}>{reader.email}</Text>
+            </View>
+            <Text style={styles.roleBadge}>{reader.role === "desk" ? "Desk" : "Reader"}</Text>
+          </View>
+          <SecondaryButton
             label="Log out"
             onPress={() => {
               void logout()
@@ -323,9 +411,11 @@ function AccountPane({
         </View>
       ) : (
         <View style={styles.card}>
-          <TextInput style={styles.input} placeholder="Name" placeholderTextColor={colors.soft} value={name} onChangeText={setName} />
-          <TextInput style={styles.input} placeholder="Email" placeholderTextColor={colors.soft} autoCapitalize="none" value={email} onChangeText={setEmail} />
-          <TextInput style={styles.input} placeholder="Password" placeholderTextColor={colors.soft} secureTextEntry value={password} onChangeText={setPassword} />
+          <Text style={styles.cardTitle}>Sign in or register</Text>
+          <Text style={styles.meta}>Your shelf and bookmarks follow you between the website and the phone.</Text>
+          <TextInput style={styles.input} placeholder="Name (for registering)" placeholderTextColor={colors.faint} value={name} onChangeText={setName} />
+          <TextInput style={styles.input} placeholder="Email" placeholderTextColor={colors.faint} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+          <TextInput style={styles.input} placeholder="Password" placeholderTextColor={colors.faint} secureTextEntry value={password} onChangeText={setPassword} />
           <PrimaryButton
             label="Sign in"
             onPress={() => {
@@ -353,13 +443,13 @@ function AccountPane({
       )}
       {reader?.role === "desk" ? (
         <View style={styles.card}>
-          <Text style={styles.work}>Desk</Text>
+          <Text style={styles.cardTitle}>Desk</Text>
           {counts ? <Text style={styles.meta}>{counts}</Text> : null}
-          <TextInput style={styles.input} placeholder="Title" placeholderTextColor={colors.soft} value={work} onChangeText={setWork} />
-          <TextInput style={styles.input} placeholder="Author" placeholderTextColor={colors.soft} value={writer} onChangeText={setWriter} />
-          <TextInput style={styles.input} placeholder="Category" placeholderTextColor={colors.soft} value={category} onChangeText={setCategory} />
-          <TextInput style={styles.input} placeholder="Year" placeholderTextColor={colors.soft} value={year} onChangeText={setYear} />
-          <TextInput style={styles.input} placeholder="Bibliographic note" placeholderTextColor={colors.soft} value={note} onChangeText={setNote} />
+          <TextInput style={styles.input} placeholder="Title" placeholderTextColor={colors.faint} value={work} onChangeText={setWork} />
+          <TextInput style={styles.input} placeholder="Author" placeholderTextColor={colors.faint} value={writer} onChangeText={setWriter} />
+          <TextInput style={styles.input} placeholder="Category" placeholderTextColor={colors.faint} value={category} onChangeText={setCategory} />
+          <TextInput style={styles.input} placeholder="Year" placeholderTextColor={colors.faint} value={year} onChangeText={setYear} />
+          <TextInput style={styles.input} placeholder="Bibliographic note" placeholderTextColor={colors.faint} value={note} onChangeText={setNote} />
           <PrimaryButton
             label="Add title"
             onPress={() => {
@@ -385,6 +475,18 @@ function AccountPane({
           />
         </View>
       ) : null}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Server</Text>
+        <Text style={styles.meta}>API address</Text>
+        <TextInput style={styles.input} value={base} onChangeText={setBase} autoCapitalize="none" autoCorrect={false} />
+        <SecondaryButton
+          label="Save address"
+          onPress={() => {
+            void saveBase(base).then(() => setMessage(`Using ${getBase()}`));
+          }}
+        />
+        <Text style={styles.meta}>The emulator default is {DEFAULT_BASE}.</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -394,55 +496,113 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.green,
+    paddingBottom: 12,
+    backgroundColor: colors.paper,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  brand: { fontFamily: "serif", fontSize: 22, color: colors.ink },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandMarkText: { color: colors.onGreen, fontFamily: "serif", fontSize: 20 },
+  brand: { fontFamily: "serif", fontSize: 19, color: colors.ink },
+  kicker: { color: colors.soft, fontSize: 12 },
+  pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.greenWash },
+  pillPressed: { backgroundColor: "#cfe3d6" },
+  pillText: { color: colors.greenDeep, fontWeight: "600" },
   body: { flex: 1 },
   tabs: {
     flexDirection: "row",
     borderTopWidth: 1,
     borderTopColor: colors.line,
     backgroundColor: colors.card,
+    paddingBottom: 6,
   },
-  tab: { flex: 1, paddingVertical: 12, alignItems: "center" },
+  tab: { flex: 1, paddingTop: 0, paddingBottom: 6, alignItems: "center", gap: 1 },
+  tabIndicator: { width: 28, height: 3, borderRadius: 2, marginBottom: 6, backgroundColor: "transparent" },
+  tabIndicatorOn: { backgroundColor: colors.green },
+  tabIcon: { fontSize: 18 },
   tabOn: { color: colors.green, fontWeight: "600" },
-  tabOff: { color: colors.soft },
-  filters: { padding: 12, gap: 8 },
-  list: { padding: 12, gap: 12 },
+  tabOff: { color: colors.faint },
+  filters: { gap: 8, paddingBottom: 6, paddingHorizontal: 6 },
+  searchRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  searchInput: { flex: 1 },
+  chips: { gap: 8, paddingVertical: 2 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+  },
+  chipOn: { backgroundColor: colors.green, borderColor: colors.green },
+  chipText: { color: colors.ink },
+  chipTextOn: { color: colors.onGreen, fontWeight: "600" },
+  count: { color: colors.faint, fontSize: 13, marginTop: 2 },
+  grid: { padding: 6, paddingTop: 10, flexGrow: 1 },
+  cell: { width: "50%", padding: 6 },
+  paneHeader: { gap: 8, paddingHorizontal: 6 },
+  paneTitle: { fontFamily: "serif", fontSize: 24, color: colors.ink, marginBottom: 2 },
+  list: { padding: 16, gap: 14 },
   card: {
     backgroundColor: colors.card,
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: radius.card,
-    padding: 14,
-    gap: 6,
+    padding: 16,
+    gap: 10,
+    ...shadow,
   },
-  work: { fontFamily: "serif", fontSize: 20, color: colors.ink },
-  writer: { color: colors.ink },
+  cardTitle: { fontFamily: "serif", fontSize: 19, color: colors.ink },
+  profileRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { color: colors.onGreen, fontSize: 20, fontWeight: "600" },
+  roleBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.greenWash,
+    color: colors.greenDeep,
+    fontWeight: "600",
+    overflow: "hidden",
+  },
   meta: { color: colors.soft },
+  empty: { alignItems: "center", padding: 32, gap: 6 },
+  emptyTitle: { fontFamily: "serif", fontSize: 20, color: colors.ink },
   banner: {
-    marginHorizontal: 12,
-    marginBottom: 8,
     backgroundColor: "#f6e7c8",
     borderColor: "#e4d0a4",
     borderWidth: 1,
     borderRadius: radius.card,
     padding: 12,
     color: colors.ink,
+    overflow: "hidden",
   },
   input: {
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.card,
+    backgroundColor: "#fff",
     borderRadius: radius.control,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     color: colors.ink,
   },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
+  row: { flexDirection: "row", alignItems: "center", gap: 4 },
 });

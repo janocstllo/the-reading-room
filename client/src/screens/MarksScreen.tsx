@@ -40,7 +40,7 @@ export function MarksScreen() {
       <h2>Bookmarks</h2>
       {message ? <p className="banner">{message}</p> : null}
       {titles.length === 0 ? <p className="notice">No bookmarks yet.</p> : null}
-      <div className="stack">
+      <div className="book-grid">
         {titles.map((title) => (
           <CatalogCard
             key={title.id}

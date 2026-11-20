@@ -40,7 +40,7 @@ export function ShelfScreen() {
       <h2>My shelf</h2>
       {message ? <p className="banner">{message}</p> : null}
       {titles.length === 0 ? <p className="notice">Nothing is on your shelf yet.</p> : null}
-      <div className="stack">
+      <div className="book-grid">
         {titles.map((title) => (
           <CatalogCard
             key={title.id}

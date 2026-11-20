@@ -45,8 +45,10 @@ export function CatalogScreen() {
 
   return (
     <section>
-      <h2>Catalog</h2>
-      <p className="lede">Search by title, writer, or section. Each record opens onto a bibliographic card, not the book text.</p>
+      <div className="page-intro">
+        <h2>Catalog</h2>
+        <p className="lede">Search by title, writer, or section. Each record opens onto a bibliographic card, not the book text.</p>
+      </div>
       <form
         className="filters"
         onSubmit={(event) => {
@@ -73,7 +75,7 @@ export function CatalogScreen() {
             ))}
           </select>
         </label>
-        <button className="btn btn-secondary" type="submit">
+        <button className="btn btn-primary" type="submit">
           Search
         </button>
         <button
@@ -95,14 +97,19 @@ export function CatalogScreen() {
       ) : null}
       {!loaded && !problem ? <p className="notice">Opening the shelves…</p> : null}
       {loaded && !problem && titles.length === 0 ? <p className="notice">No titles match.</p> : null}
-      <div className="stack">
+      {loaded && titles.length > 0 ? (
+        <p className="result-count">
+          {titles.length} {titles.length === 1 ? "title" : "titles"}
+        </p>
+      ) : null}
+      <div className="book-grid">
         {titles.map((title) => (
           <CatalogCard
             key={title.id}
             title={title}
             action={
               <Link className="btn btn-text" to={`/titles/${title.id}`}>
-                Open record
+                Open record →
               </Link>
             }
           />
