@@ -25,6 +25,19 @@ model Reader {
   shelf        ShelfEntry[]
 }
 
+// A registration waiting for its emailed 6-digit code. The Reader row is only
+// created once the code is confirmed, so unverified emails never get an account.
+model SignupCode {
+  email        String   @id
+  name         String
+  passwordHash String
+  codeHash     String
+  attempts     Int      @default(0)
+  expiresAt    DateTime
+  sentAt       DateTime
+  createdAt    DateTime @default(now())
+}
+
 model Title {
   id          String       @id @default(cuid())
   slug        String       @unique

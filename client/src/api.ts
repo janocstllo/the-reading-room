@@ -91,10 +91,26 @@ export async function getTitle(id: string): Promise<TitleRecord> {
   return body.title;
 }
 
+// Step 1 of registering: the server emails a 6-digit code.
 export async function register(input: { name: string; email: string; password: string }) {
-  return request<{ token: string; reader: ReaderProfile }>("/api/session/register", {
+  return request<{ pending: true; email: string }>("/api/session/register", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+// Step 2: confirm the code; the account is created and signed in.
+export async function verifySignup(email: string, code: string) {
+  return request<{ token: string; reader: ReaderProfile }>("/api/session/register/verify", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+}
+
+export async function resendSignupCode(email: string) {
+  return request<{ pending: true; email: string }>("/api/session/register/resend", {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 

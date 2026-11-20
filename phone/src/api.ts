@@ -1,13 +1,35 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 const TOKEN_KEY = "reading-room-token";
 const BASE_KEY = "reading-room-base";
-export const DEFAULT_BASE = "http://10.0.2.2:4100";
+// The live server, so the app works on a real phone without any setup.
+// For a local server use http://10.0.2.2:4100 (Android emulator) or
+// http://<your computer's Wi-Fi IP>:4100 (real phone), set on the Account tab.
+export const DEFAULT_BASE = "https://the-reading-room.wasmer.app";
 
 let base = DEFAULT_BASE;
 let token: string | null = null;
+
+function storageFile(key: string): File {
+  return new File(Paths.document, `${key}.txt`);
+}
+
+async function getStoredValue(key: string): Promise<string | null> {
+  const file = storageFile(key);
+  return file.exists ? file.text() : null;
+}
+
+async function setStoredValue(key: string, value: string): Promise<void> {
+  const file = storageFile(key);
+  if (!file.exists) file.create();
+  await file.write(value);
+}
+
+async function removeStoredValue(key: string): Promise<void> {
+  const file = storageFile(key);
+  if (file.exists) file.delete();
+}
 
 export type ReaderProfile = {
   id: string;
@@ -66,8 +88,8 @@ export function hasStoredToken(): boolean {
 
 export async function loadStoredSession(): Promise<void> {
   const [savedBase, savedToken] = await Promise.all([
-    AsyncStorage.getItem(BASE_KEY),
-    AsyncStorage.getItem(TOKEN_KEY),
+    getStoredValue(BASE_KEY),
+    getStoredValue(TOKEN_KEY),
   ]);
   base = (savedBase || DEFAULT_BASE).replace(/\/$/, "");
   token = savedToken;
@@ -75,13 +97,13 @@ export async function loadStoredSession(): Promise<void> {
 
 export async function saveBase(next: string): Promise<void> {
   base = (next.trim() || DEFAULT_BASE).replace(/\/$/, "");
-  await AsyncStorage.setItem(BASE_KEY, base);
+  await setStoredValue(BASE_KEY, base);
 }
 
 export async function saveToken(next: string | null): Promise<void> {
   token = next;
-  if (next) await AsyncStorage.setItem(TOKEN_KEY, next);
-  else await AsyncStorage.removeItem(TOKEN_KEY);
+  if (next) await setStoredValue(TOKEN_KEY, next);
+  else await removeStoredValue(TOKEN_KEY);
 }
 
 function headers(json = false): Record<string, string> {
@@ -135,10 +157,26 @@ export async function login(email: string, password: string) {
   });
 }
 
+// Step 1 of registering: the server emails a 6-digit code.
 export async function register(name: string, email: string, password: string) {
-  return request<{ token: string; reader: ReaderProfile }>("/api/session/register", {
+  return request<{ pending: true; email: string }>("/api/session/register", {
     method: "POST",
     body: JSON.stringify({ name, email, password }),
+  });
+}
+
+// Step 2: confirm the code; the account is created and signed in.
+export async function verifySignup(email: string, code: string) {
+  return request<{ token: string; reader: ReaderProfile }>("/api/session/register/verify", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+}
+
+export async function resendSignupCode(email: string) {
+  return request<{ pending: true; email: string }>("/api/session/register/resend", {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 

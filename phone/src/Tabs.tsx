@@ -19,6 +19,8 @@ import {
   logout,
   me,
   register,
+  resendSignupCode,
+  verifySignup,
   removeBookmark,
   removeFromShelf,
   saveBase,
@@ -367,7 +369,22 @@ function AccountPane({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+
+  async function attempt(action: () => Promise<void>, fallback: string) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await action();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : fallback);
+    } finally {
+      setBusy(false);
+    }
+  }
   const [counts, setCounts] = useState("");
   const [work, setWork] = useState("");
   const [writer, setWriter] = useState("");
@@ -409,6 +426,48 @@ function AccountPane({
             }}
           />
         </View>
+      ) : pendingEmail ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Check your email</Text>
+          <Text style={styles.meta}>
+            We sent a 6-digit code to {pendingEmail}. Enter it to finish creating your account. Look in spam if it does not arrive.
+          </Text>
+          <TextInput
+            style={[styles.input, { fontSize: 22, letterSpacing: 6, textAlign: "center" }]}
+            placeholder="123456"
+            placeholderTextColor={colors.faint}
+            keyboardType="number-pad"
+            textContentType="oneTimeCode"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={code}
+            onChangeText={(next) => setCode(next.replace(/\D/g, ""))}
+          />
+          <PrimaryButton
+            label={busy ? "Checking…" : "Verify and create account"}
+            disabled={busy || code.length !== 6}
+            onPress={() =>
+              void attempt(async () => {
+                const result = await verifySignup(pendingEmail, code);
+                await saveToken(result.token);
+                setPendingEmail("");
+                setCode("");
+                onReader(result.reader);
+              }, "That code could not be checked.")
+            }
+          />
+          <SecondaryButton
+            label="Send a new code"
+            disabled={busy}
+            onPress={() =>
+              void attempt(async () => {
+                await resendSignupCode(pendingEmail);
+                setMessage("A new code is on its way.");
+              }, "The code could not be sent.")
+            }
+          />
+          <TextButton label="Use a different email" disabled={busy} onPress={() => setPendingEmail("")} />
+        </View>
       ) : (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Sign in or register</Text>
@@ -429,15 +488,15 @@ function AccountPane({
             }}
           />
           <SecondaryButton
-            label="Register"
-            onPress={() => {
-              void register(name, email, password)
-                .then(async (result) => {
-                  await saveToken(result.token);
-                  onReader(result.reader);
-                })
-                .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Registration failed."));
-            }}
+            label={busy ? "Sending code…" : "Register"}
+            disabled={busy}
+            onPress={() =>
+              void attempt(async () => {
+                const result = await register(name, email.trim(), password);
+                setCode("");
+                setPendingEmail(result.email);
+              }, "Registration failed.")
+            }
           />
         </View>
       )}
@@ -485,7 +544,7 @@ function AccountPane({
             void saveBase(base).then(() => setMessage(`Using ${getBase()}`));
           }}
         />
-        <Text style={styles.meta}>The emulator default is {DEFAULT_BASE}.</Text>
+        <Text style={styles.meta}>Default: {DEFAULT_BASE}. Leave the box empty and save to go back to it.</Text>
       </View>
     </ScrollView>
   );
