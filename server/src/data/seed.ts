@@ -2,6 +2,52 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./db.js";
 import { WORKS } from "./works.js";
 
+async function upsertAccount(account: {
+  email: string;
+  name: string;
+  role: "reader" | "desk";
+  password: string;
+}): Promise<void> {
+  const passwordHash = await bcrypt.hash(account.password, 10);
+  await prisma.reader.upsert({
+    where: { email: account.email },
+    update: { name: account.name, role: account.role, passwordHash },
+    create: { email: account.email, name: account.name, role: account.role, passwordHash },
+  });
+}
+
+// Demo accounts with well-known passwords are only created when SEED_DEMO_ACCOUNTS=true
+// (local development). In production, set DESK_EMAIL and DESK_PASSWORD to create the
+// staff account with a password only you know.
+async function seedAccounts(): Promise<void> {
+  if (process.env.SEED_DEMO_ACCOUNTS === "true") {
+    await upsertAccount({
+      email: "reader@readingroom.local",
+      name: "Rowan Hale",
+      role: "reader",
+      password: "Reader123!",
+    });
+    await upsertAccount({
+      email: "desk@readingroom.local",
+      name: "Morgan Ellis",
+      role: "desk",
+      password: "Desk123!",
+    });
+  }
+
+  const deskEmail = process.env.DESK_EMAIL?.trim().toLowerCase();
+  const deskPassword = process.env.DESK_PASSWORD;
+  if (deskEmail && deskPassword) {
+    if (deskPassword.length < 12) throw new Error("DESK_PASSWORD must be at least 12 characters.");
+    await upsertAccount({
+      email: deskEmail,
+      name: process.env.DESK_NAME?.trim() || "Desk",
+      role: "desk",
+      password: deskPassword,
+    });
+  }
+}
+
 export async function seedReadingRoom(): Promise<void> {
   const slugs = new Set<string>();
   const identities = new Set<string>();
@@ -16,28 +62,7 @@ export async function seedReadingRoom(): Promise<void> {
     throw new Error(`The catalog seed has ${WORKS.length} titles; at least 200 are required.`);
   }
 
-  const readerHash = await bcrypt.hash("Reader123!", 10);
-  const deskHash = await bcrypt.hash("Desk123!", 10);
-  await prisma.reader.upsert({
-    where: { email: "reader@readingroom.local" },
-    update: { name: "Rowan Hale", role: "reader", passwordHash: readerHash },
-    create: {
-      email: "reader@readingroom.local",
-      name: "Rowan Hale",
-      role: "reader",
-      passwordHash: readerHash,
-    },
-  });
-  await prisma.reader.upsert({
-    where: { email: "desk@readingroom.local" },
-    update: { name: "Morgan Ellis", role: "desk", passwordHash: deskHash },
-    create: {
-      email: "desk@readingroom.local",
-      name: "Morgan Ellis",
-      role: "desk",
-      passwordHash: deskHash,
-    },
-  });
+  await seedAccounts();
 
   const existing = await prisma.title.count();
   if (existing >= 200) {

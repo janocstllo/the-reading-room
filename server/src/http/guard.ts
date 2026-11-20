@@ -3,6 +3,10 @@ import jwt from "jsonwebtoken";
 import { HttpError } from "./errors.js";
 
 const SECRET = process.env.JWT_SECRET || "reading-room-local-secret";
+if (process.env.NODE_ENV === "production" && SECRET === "reading-room-local-secret") {
+  // A known secret lets anyone forge a desk (staff) token.
+  throw new Error("Set JWT_SECRET to a long random value in production.");
+}
 
 export type AuthReader = {
   id: string;

@@ -4,5 +4,9 @@ dist
 *.log
 server/prisma/*.db
 server/prisma/*.db-journal
+.env
+.env.*
+!.env.example
+server/dist
 client/dist
 phone/dist

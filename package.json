@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n room,web -c green,blue \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "phone": "npm run start --prefix phone"
+    "phone": "npm run start --prefix phone",
+    "build": "npm ci --prefix client && npm run build --prefix client && npm ci --prefix server && npm run build --prefix server",
+    "start": "node server/dist/index.js"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

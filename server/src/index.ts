@@ -1,5 +1,8 @@
 import cors from "cors";
 import express from "express";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { openShelves } from "./bootstrap.js";
 import { catalogRouter } from "./http/catalog.js";
 import { deskRouter } from "./http/desk.js";
@@ -37,6 +40,16 @@ app.use("/api", catalogRouter);
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: "That path is not in the reading room." });
 });
+// Serve the built website (client/dist) from the same origin as the API.
+const webRoot =
+  process.env.WEB_ROOT ||
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "client", "dist");
+if (existsSync(path.join(webRoot, "index.html"))) {
+  app.use(express.static(webRoot, { index: false, maxAge: "1h" }));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(webRoot, "index.html"));
+  });
+}
 app.use(onError);
 
 const port = Number(process.env.PORT) || 4100;
